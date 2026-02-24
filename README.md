@@ -232,6 +232,50 @@ claude                                              # starts Claude Code session
 
 Claude Code reads `CLAUDE.md` on startup and can manage the server, edit extension code, restart containers, and debug issues.
 
+## Voice Call Pricing (per minute)
+
+Model: `gpt-realtime-mini` via OpenAI Realtime API + Twilio.
+
+### Cost Components
+
+| Component | Rate | Note |
+|-----------|------|------|
+| OpenAI Realtime audio input | $0.006/min | ~600 tokens/min @ $10/1M tokens |
+| OpenAI Realtime audio output | $0.024/min | ~1200 tokens/min @ $20/1M tokens |
+| OpenAI context replay (cached) | ~$0.002–0.01/min | Prior turns resent, $0.30/1M cached tokens |
+| Twilio media streams | $0.004/min | WebSocket bidirectional audio |
+| Twilio voice (US → US) | $0.014/min | |
+| Twilio voice (US → EU mobile) | $0.040/min | DE/FR average |
+| Twilio voice (US → Russia mobile) | $0.343/min | |
+
+### Total Per Minute by Destination
+
+| Destination | First minute | Avg (3-5 min call) | 5 min call total |
+|-------------|-------------|--------------------|--------------------|
+| **US** | ~$0.05 | ~$0.08–0.15 | ~$0.40–0.75 |
+| **EU mobile** | ~$0.07 | ~$0.10–0.18 | ~$0.50–0.90 |
+| **Russia mobile** | ~$0.38 | ~$0.40–0.50 | ~$2.00–2.50 |
+
+> Context replay cost grows with conversation length — OpenAI re-sends all prior audio tokens each turn.
+> Cached audio input ($0.30/1M) reduces this by ~97% vs uncached ($10/1M).
+> First minute is cheapest, longer calls cost more per minute due to context accumulation.
+
+### Monthly Fixed Costs
+
+| Item | Cost |
+|------|------|
+| Twilio US local number | $1.15/mo |
+| OpenAI API | pay-as-you-go |
+
+### Other API Costs (not voice)
+
+| Service | Rate |
+|---------|------|
+| Claude Sonnet 4.6 (agent brain) | $3/$15 per 1M tokens in/out |
+| OpenAI Whisper (voice messages) | $0.006/min |
+| OpenAI DALL-E 3 (image gen) | $0.040–0.080/image |
+| Brave Search | $0.005/query (1000 free/mo) |
+
 ## Security Notes
 
 - All secrets via env vars (`${VAR}` syntax in config) — never hardcoded
