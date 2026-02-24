@@ -1,0 +1,3 @@
+voicesegozavr.com {
+	reverse_proxy localhost:3334
+}

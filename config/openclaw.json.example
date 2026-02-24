@@ -1,0 +1,99 @@
+{
+  "meta": {
+    "lastTouchedVersion": "2026.2.17"
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "anthropic/claude-sonnet-4-6"
+      },
+      "models": {
+        "anthropic/claude-opus-4-6": {
+          "alias": "opus",
+          "params": { "cacheRetention": "short" }
+        },
+        "anthropic/claude-sonnet-4-6": {
+          "alias": "sonnet",
+          "params": { "cacheRetention": "short" }
+        }
+      },
+      "contextPruning": { "mode": "cache-ttl", "ttl": "1h" },
+      "compaction": { "mode": "safeguard" },
+      "heartbeat": { "every": "30m" }
+    }
+  },
+  "tools": {
+    "web": {
+      "search": {
+        "enabled": true,
+        "provider": "brave",
+        "apiKey": "${BRAVE_API_KEY}"
+      },
+      "fetch": { "enabled": true }
+    }
+  },
+  "commands": {
+    "native": "auto",
+    "nativeSkills": "auto"
+  },
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "dmPolicy": "allowlist",
+      "botToken": "${TELEGRAM_BOT_TOKEN}",
+      "allowFrom": [YOUR_TELEGRAM_USER_ID],
+      "groupPolicy": "disabled",
+      "streamMode": "partial"
+    }
+  },
+  "gateway": {
+    "port": 18789,
+    "mode": "local",
+    "bind": "loopback",
+    "auth": {
+      "mode": "token",
+      "token": "GENERATE_RANDOM_TOKEN_HERE"
+    }
+  },
+  "plugins": {
+    "entries": {
+      "telegram": { "enabled": true },
+      "voice-call": {
+        "enabled": true,
+        "config": {
+          "provider": "twilio",
+          "fromNumber": "${TWILIO_FROM_NUMBER}",
+          "twilio": {
+            "accountSid": "${TWILIO_ACCOUNT_SID}",
+            "authToken": "${TWILIO_AUTH_TOKEN}"
+          },
+          "serve": {
+            "port": 3334,
+            "path": "/voice/webhook",
+            "bind": "0.0.0.0"
+          },
+          "publicUrl": "https://YOUR_DOMAIN/voice/webhook",
+          "outbound": { "defaultMode": "conversation" },
+          "maxDurationSeconds": 300,
+          "responseSystemPrompt": "Your voice assistant system prompt here",
+          "responseTimeoutMs": 15000,
+          "tts": {
+            "provider": "openai",
+            "openai": {
+              "apiKey": "${OPENAI_API_KEY}",
+              "model": "tts-1",
+              "voice": "alloy"
+            }
+          },
+          "streaming": {
+            "enabled": true,
+            "sttProvider": "openai-realtime",
+            "openaiApiKey": "${OPENAI_API_KEY}",
+            "silenceDurationMs": 600,
+            "vadThreshold": 0.5
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,20 @@
+# Secrets
+.env
+*.pem
+*.key
+
+# OpenClaw runtime data
+.openclaw/
+*.bak
+*.bak.*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Node
+node_modules/

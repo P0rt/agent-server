@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  openclaw-gateway:
+    image: ghcr.io/openclaw/openclaw:latest
+    container_name: openclaw-gateway
+    user: "1001:1001"
+
+    ports:
+      # Bind to localhost only for security
+      - "127.0.0.1:18789:18789"
+      - "127.0.0.1:18790:18790"
+      # Voice call webhook — localhost only, ngrok/Caddy proxies externally
+      - "127.0.0.1:3334:3334"
+
+    volumes:
+      # Map /srv/openclaw/.openclaw to container home config
+      - /srv/openclaw/.openclaw:/home/node/.openclaw
+      # Override voice-call extension with realtime conversation support
+      - /srv/openclaw/extensions-override/voice-call:/app/extensions/voice-call
+
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      BRAVE_API_KEY: ${BRAVE_API_KEY}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
+      TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+      NODE_ENV: production
+      HOME: /home/node
+      TERM: xterm-256color
+
+    restart: unless-stopped
+
+    mem_limit: 1.5g
+    cpus: "1.5"
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+      - 1.1.1.1
