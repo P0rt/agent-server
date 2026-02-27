@@ -28,6 +28,7 @@ services:
       TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+      LINEAR_API_KEY: ${LINEAR_API_KEY}
       NODE_ENV: production
       HOME: /home/node
       TERM: xterm-256color
