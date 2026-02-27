@@ -29,6 +29,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
       LINEAR_API_KEY: ${LINEAR_API_KEY}
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
       NODE_ENV: production
       HOME: /home/node
       TERM: xterm-256color
