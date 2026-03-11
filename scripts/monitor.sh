@@ -6,8 +6,9 @@
 # - Re-alert cooldown: 30 min per threat type to avoid spam
 
 CONTAINER="openclaw-gateway"
-BOT_TOKEN="8238337359:AAHIs2OLpRHQbmPPB2wumvl7akfGtKzXHU4"
-CHAT_ID="94046463"
+source /root/.alert-env
+BOT_TOKEN="$ALERT_BOT_TOKEN"
+CHAT_ID="$ALERT_CHAT_ID"
 LOG="/root/.openclaw/logs/monitor.log"
 THREAT_STATE="/root/.openclaw/logs/threat-state.json"
 
@@ -112,17 +113,33 @@ json.dump(d,open('$THREAT_STATE','w'))
     tg "🟡 <b>openclaw-tg-bot</b>: Контейнер завис (порт не отвечал). Перезапустил."
   fi
 else
-  # Not running — restart
-  log "WARN: $CONTAINER status=$STATUS — restarting"
+  # Not running — grab crash logs before restart
+  GW_CRASH_LOG=$(docker logs "$CONTAINER" --tail=15 2>&1 | grep -iE "error|fail|invalid|problem|crash|panic|SIGKILL|OOM" | tail -5 | head -c 600)
+  GW_EXIT_CODE=$(docker inspect --format='{{.State.ExitCode}}' "$CONTAINER" 2>/dev/null)
+
+  log "WARN: $CONTAINER status=$STATUS exit=$GW_EXIT_CODE — restarting"
   docker start "$CONTAINER" >> "$LOG" 2>&1
   sleep 10
   NEW_STATUS=$(docker inspect --format='{{.State.Status}}' "$CONTAINER" 2>/dev/null)
   if [ "$NEW_STATUS" = "running" ]; then
     log "INFO: $CONTAINER restarted successfully"
-    tg "🟡 <b>openclaw-tg-bot</b>: Контейнер был <code>$STATUS</code>. Перезапустил ✓"
+    PM_MSG="🟡 <b>POSTMORTEM</b> — <code>$CONTAINER</code>
+
+<b>was</b>  <code>$STATUS</code> (exit <code>$GW_EXIT_CODE</code>)
+<b>now</b>  running ✓"
+    if [ -n "$GW_CRASH_LOG" ]; then
+      PM_MSG="$PM_MSG
+
+<b>cause</b>
+<code>$(echo "$GW_CRASH_LOG" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')</code>"
+    fi
+    tg "$PM_MSG"
   else
     log "ERROR: $CONTAINER failed to restart, status=$NEW_STATUS"
-    tg "🔴 <b>openclaw-tg-bot</b>: Контейнер <code>$STATUS</code> → перезапуск не помог (<code>$NEW_STATUS</code>). Нужно ручное вмешательство!"
+    tg "🔴 <b>openclaw-tg-bot</b>: <code>$CONTAINER</code> <code>$STATUS</code> → перезапуск не помог (<code>$NEW_STATUS</code>)
+
+<b>last logs</b>
+<code>$(echo "$GW_CRASH_LOG" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')</code>"
   fi
 fi
 
@@ -238,16 +255,31 @@ if [ -n "$WB_STATUS" ]; then
       tg "🟡 <b>openclaw-tg-bot</b>: <code>$WB_CONTAINER</code> завис (порт не отвечал). Перезапустил."
     fi
   else
-    log "WARN: $WB_CONTAINER status=$WB_STATUS — restarting"
+    # Grab crash logs before restart
+    WB_CRASH_LOG=$(docker logs "$WB_CONTAINER" --tail=15 2>&1 | grep -iE "error|fail|invalid|problem|crash|panic|SIGKILL|OOM" | tail -5 | head -c 600)
+    WB_EXIT_CODE=$(docker inspect --format='{{.State.ExitCode}}' "$WB_CONTAINER" 2>/dev/null)
+
+    log "WARN: $WB_CONTAINER status=$WB_STATUS exit=$WB_EXIT_CODE — restarting"
     docker start "$WB_CONTAINER" >> "$LOG" 2>&1
     sleep 10
     WB_NEW=$(docker inspect --format='{{.State.Status}}' "$WB_CONTAINER" 2>/dev/null)
     if [ "$WB_NEW" = "running" ]; then
       log "INFO: $WB_CONTAINER restarted successfully"
-      tg "🟡 <b>openclaw-tg-bot</b>: <code>$WB_CONTAINER</code> был <code>$WB_STATUS</code>. Перезапустил ✓"
+      # Postmortem alert with crash reason
+      PM_MSG="🟡 <b>POSTMORTEM</b> — <code>$WB_CONTAINER</code>
+
+<b>was</b>  <code>$WB_STATUS</code> (exit <code>$WB_EXIT_CODE</code>)
+<b>now</b>  running ✓"
+      if [ -n "$WB_CRASH_LOG" ]; then
+        PM_MSG="$PM_MSG
+
+<b>cause</b>
+<code>$(echo "$WB_CRASH_LOG" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')</code>"
+      fi
+      tg "$PM_MSG"
     else
-      log "ERROR: $WB_CONTAINER failed to restart, status=$WB_NEW"
-      tg "🔴 <b>openclaw-tg-bot</b>: <code>$WB_CONTAINER</code> <code>$WB_STATUS</code> → перезапуск не помог (<code>$WB_NEW</code>)"
+      log "WARN: $WB_CONTAINER restart failed ($WB_NEW), trying autofix"
+      /root/autofix.sh "$WB_CONTAINER" /srv/openclaw-work &
     fi
   fi
 fi
