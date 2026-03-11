@@ -4,6 +4,7 @@ services:
   openclaw-gateway:
     image: ghcr.io/openclaw/openclaw:latest
     container_name: openclaw-gateway
+    init: true
     user: "1001:1001"
 
     ports:
