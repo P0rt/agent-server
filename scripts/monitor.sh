@@ -5,12 +5,9 @@
 # - Checks network threats (DDoS, brute-force) — alerts immediately
 # - Re-alert cooldown: 30 min per threat type to avoid spam
 
-# Source alert bot credentials
-[ -f /root/.alert-env ] && source /root/.alert-env
-
 CONTAINER="openclaw-gateway"
-BOT_TOKEN="${ALERT_BOT_TOKEN:?Set ALERT_BOT_TOKEN in /root/.alert-env}"
-CHAT_ID="${ALERT_CHAT_ID:?Set ALERT_CHAT_ID in /root/.alert-env}"
+BOT_TOKEN="8238337359:AAHIs2OLpRHQbmPPB2wumvl7akfGtKzXHU4"
+CHAT_ID="94046463"
 LOG="/root/.openclaw/logs/monitor.log"
 THREAT_STATE="/root/.openclaw/logs/threat-state.json"
 
@@ -223,6 +220,77 @@ fail2ban  <code>$BANNED_NOW</code> banned  [3 tries → 24h ban]
 
 <b>top attackers</b>
 <code>$TOP_SSH</code>"
+fi
+
+# ============================================================
+# 4. WORKBOT CONTAINER HEALTH (openclaw-workbot)
+# ============================================================
+WB_CONTAINER="openclaw-workbot"
+WB_STATUS=$(docker inspect --format='{{.State.Status}}' "$WB_CONTAINER" 2>/dev/null)
+
+if [ -n "$WB_STATUS" ]; then
+  if [ "$WB_STATUS" = "running" ]; then
+    if ss -tlnp 2>/dev/null | grep -q ':18791'; then
+      log "OK: $WB_CONTAINER running, port 18791 up"
+    else
+      log "WARN: $WB_CONTAINER running but port 18791 not listening — restarting"
+      docker restart "$WB_CONTAINER" >> "$LOG" 2>&1
+      tg "🟡 <b>openclaw-tg-bot</b>: <code>$WB_CONTAINER</code> завис (порт не отвечал). Перезапустил."
+    fi
+  else
+    log "WARN: $WB_CONTAINER status=$WB_STATUS — restarting"
+    docker start "$WB_CONTAINER" >> "$LOG" 2>&1
+    sleep 10
+    WB_NEW=$(docker inspect --format='{{.State.Status}}' "$WB_CONTAINER" 2>/dev/null)
+    if [ "$WB_NEW" = "running" ]; then
+      log "INFO: $WB_CONTAINER restarted successfully"
+      tg "🟡 <b>openclaw-tg-bot</b>: <code>$WB_CONTAINER</code> был <code>$WB_STATUS</code>. Перезапустил ✓"
+    else
+      log "ERROR: $WB_CONTAINER failed to restart, status=$WB_NEW"
+      tg "🔴 <b>openclaw-tg-bot</b>: <code>$WB_CONTAINER</code> <code>$WB_STATUS</code> → перезапуск не помог (<code>$WB_NEW</code>)"
+    fi
+  fi
+fi
+
+# --- Claude Code zombie/stuck cleanup in workbot ---
+if docker inspect --format='{{.State.Running}}' "$WB_CONTAINER" 2>/dev/null | grep -q true; then
+  # Kill defunct (zombie) claude processes
+  ZOMBIES=$(docker exec "$WB_CONTAINER" sh -c 'ps -o pid,stat,comm 2>/dev/null | grep -E "Z.*(claude|acpx)" | awk "{print \$1}"' 2>/dev/null)
+  if [ -n "$ZOMBIES" ]; then
+    ZCOUNT=$(echo "$ZOMBIES" | wc -w)
+    log "INFO: killing $ZCOUNT zombie claude/acpx processes in $WB_CONTAINER"
+    docker exec "$WB_CONTAINER" sh -c "echo $ZOMBIES | xargs kill -9" 2>/dev/null
+  fi
+
+  # Kill claude/acpx processes running longer than 30 min (stuck)
+  # Catch both claude and claude-agent-acp (parent node process)
+  STUCK=$(docker exec "$WB_CONTAINER" sh -c 'ps -o pid,etimes,rss,args 2>/dev/null | grep -E "claude-agent-acp|/claude " | grep -v grep | awk "\$2 > 1800 {print \$1}"' 2>/dev/null)
+  if [ -n "$STUCK" ]; then
+    SCOUNT=$(echo "$STUCK" | wc -w)
+    # Memory before kill (KB → MB)
+    MEM_KB=$(docker exec "$WB_CONTAINER" sh -c 'ps -o pid,rss 2>/dev/null | grep -E "'"$(echo $STUCK | tr ' ' '|')"'" | awk "{s+=\$2} END {print s+0}"' 2>/dev/null)
+    MEM_MB=$(( ${MEM_KB:-0} / 1024 ))
+
+    log "WARN: killing $SCOUNT stuck claude/acpx processes (>30min, ~${MEM_MB}MB) in $WB_CONTAINER"
+
+    # SIGTERM first
+    docker exec "$WB_CONTAINER" sh -c "echo $STUCK | xargs kill 2>/dev/null" 2>/dev/null
+    sleep 3
+
+    # Check survivors → SIGKILL
+    SURVIVORS=$(docker exec "$WB_CONTAINER" sh -c "echo $STUCK | xargs -n1 sh -c 'kill -0 \$1 2>/dev/null && echo \$1' _" 2>/dev/null)
+    if [ -n "$SURVIVORS" ]; then
+      SURV_COUNT=$(echo "$SURVIVORS" | wc -w)
+      log "WARN: $SURV_COUNT processes survived SIGTERM, sending SIGKILL"
+      docker exec "$WB_CONTAINER" sh -c "echo $SURVIVORS | xargs kill -9" 2>/dev/null
+    fi
+
+    # Alert with cooldown
+    if can_alert "claude_stuck"; then
+      save_alert "claude_stuck"
+      tg "🟡 <b>openclaw-tg-bot</b>: убил <code>$SCOUNT</code> зависших claude процессов в <code>$WB_CONTAINER</code> (~<code>${MEM_MB}MB</code> освобождено)"
+    fi
+  fi
 fi
 
 log "check complete (syn=$SYN_RECV conns=$TOTAL_CONNS ssh_fails=$SSH_FAILS)"
