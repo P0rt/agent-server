@@ -30,12 +30,13 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
       NODE_ENV: production
+      NODE_OPTIONS: "--max-old-space-size=1792"
       HOME: /home/node
       TERM: xterm-256color
 
     restart: unless-stopped
 
-    mem_limit: 1.5g
+    mem_limit: 2.5g
     cpus: "1.5"
 
     security_opt:
