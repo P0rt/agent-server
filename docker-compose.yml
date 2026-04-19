@@ -1,4 +1,10 @@
-version: '3.8'
+networks:
+  openclaw-net:
+    name: openclaw-net
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
 
 services:
   openclaw-gateway:
@@ -34,6 +40,10 @@ services:
       HOME: /home/node
       TERM: xterm-256color
 
+    networks:
+      openclaw-net:
+        ipv4_address: 172.28.0.5
+
     restart: unless-stopped
 
     mem_limit: 2.5g
@@ -49,6 +59,98 @@ services:
       driver: "json-file"
       options:
         max-size: "50m"
+        max-file: "3"
+
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+      - 1.1.1.1
+
+  # Cloudflare WARP as SOCKS5 proxy for browser egress.
+  # Free, stable, Cloudflare IPs not blocked like Tor. Listens on :1080.
+  openclaw-warp:
+    image: caomingjun/warp
+    container_name: openclaw-warp
+    restart: unless-stopped
+
+    volumes:
+      - /srv/openclaw/warp-data:/var/lib/cloudflare-warp
+
+    cap_add:
+      - NET_ADMIN
+      - MKNOD
+      - AUDIT_WRITE
+
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=0
+      - net.ipv4.conf.all.src_valid_mark=1
+
+    devices:
+      - /dev/net/tun:/dev/net/tun
+
+    networks:
+      openclaw-net:
+        ipv4_address: 172.28.0.20
+
+    mem_limit: 256m
+    cpus: "0.5"
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    dns:
+      - 1.1.1.1
+      - 1.0.0.1
+
+  # Sidecar Chromium + Xvfb + noVNC.
+  # CDP reached via static IP (http://172.28.0.10:9222) so Chromium accepts
+  # the Host header as an IP (no --remote-allow-hosts gymnastics needed).
+  openclaw-browser:
+    image: openclaw-sandbox-browser:local
+    container_name: openclaw-browser
+    init: true
+
+    # Override entrypoint with local copy that cleans stale X locks + waits for Xvfb
+    volumes:
+      - /srv/openclaw/sandbox-browser-entrypoint.sh:/usr/local/bin/openclaw-sandbox-browser:ro
+
+    # noVNC on localhost only — SSH tunnel from laptop to watch the browser live
+    ports:
+      - "127.0.0.1:6080:6080"
+
+    environment:
+      OPENCLAW_BROWSER_CDP_PORT: "9222"
+      OPENCLAW_BROWSER_VNC_PORT: "5900"
+      OPENCLAW_BROWSER_NOVNC_PORT: "6080"
+      OPENCLAW_BROWSER_ENABLE_NOVNC: "1"
+      OPENCLAW_BROWSER_HEADLESS: "0"
+      OPENCLAW_BROWSER_NO_SANDBOX: "1"
+      OPENCLAW_BROWSER_PROXY: "socks5://172.28.0.20:1080"
+
+    networks:
+      openclaw-net:
+        ipv4_address: 172.28.0.10
+
+    restart: unless-stopped
+
+    mem_limit: 1g
+    cpus: "1.0"
+
+    shm_size: "512m"
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
         max-file: "3"
 
     dns:
